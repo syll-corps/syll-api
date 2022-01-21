@@ -1,12 +1,12 @@
 package syllparser 
 
-type LinksPair struct {
-	group string 
-	teach string
+type SyllabLinker struct {
+	// Late: cashed links for the fast uri-getting.
+	template map[string]string
+
+	core string 
 } 
- 
-// Download the links from setting.link file
-func DownloadLinks() error {
-	return nil
+
+func (sl *SyllabLinker) MakeGroupUri(g string) string {
+	return sl.core + g 
 }
- 

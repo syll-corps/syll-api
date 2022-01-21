@@ -18,7 +18,7 @@ type Schedule struct {
 	Time string `json:"time"`
 
 	Auditorium string `json:"auditorium"`
-	Teacher    string `json:"teacher"`
+	Entity    string `json:"entity"`
 	Subject    string `json:"subject"`
 
 	// Status of the class - prob is the bool

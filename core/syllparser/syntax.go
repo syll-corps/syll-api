@@ -2,7 +2,6 @@ package syllparser
 
 import (
 	//"fmt"
-
 	"strings"
 
 	"github.com/gocolly/colly"
@@ -10,8 +9,8 @@ import (
 )
 
 const (
-	_idxDate       = 8
-	_idxStartDaily = _idxDate + 3
+	_idxDateG = 8
+	_idxDateT = 10
 )
 
 const (
@@ -24,21 +23,18 @@ const _evenSize = 27
 
 type SyllSyntaxer struct {
 	controller *syntaxController
+
+	/* 	mod modController */
 }
 
+// Late: func opt
 func NewSyllSyntaxer() *SyllSyntaxer {
 	return &SyllSyntaxer{
-		controller: new(syntaxController),
+		controller: &syntaxController{
+			moderator: new(modController),
+		},
 	}
 }
-
-// Mod of the syllab. Set of value is - {G, T}
-//const (
-//	_gMod = 'G'
-//	_tMod = 'T'
-//)
-
-//type syllabMod string
 
 type syntaxMetric struct {
 	succes int
@@ -48,10 +44,54 @@ type syntaxMetric struct {
 }
 
 // Controller with the custom Syntaxer behavior
+
 type syntaxController struct {
 	//Mod syllabMod
-
 	syntaxMetric *syntaxMetric
+
+	moderator *modController
+}
+
+const (
+	_modGroup = "g"
+	_modTeach = "t"
+)
+
+var _modMap = map[string]int{
+	_modGroup: _idxDateG,
+	_modTeach: _idxDateT,
+}
+
+type modController struct {
+	mod string
+
+	dayIdx int
+
+	startDailerIdx int
+
+	mondaySwitcher bool
+	emptySwitcher  bool
+}
+
+func (sc *syntaxController) GetMod() string {
+	return sc.moderator.mod
+}
+
+func (ss *SyllSyntaxer) GetEmptySwitchStatus() bool {
+	return ss.controller.moderator.emptySwitcher
+}
+
+func (ss *SyllSyntaxer) SetMod(m string) {
+	md := ss.controller.moderator
+
+	md.mod = m
+
+	md.dayIdx = _modMap[m]
+	md.startDailerIdx = md.dayIdx + 3
+
+	md.mondaySwitcher = m == _modGroup
+	md.emptySwitcher = !md.mondaySwitcher
+	//println("---PT----", md.mod, md.dayIdx, md.startDailerIdx, md.mondaySwitcher)
 }
 
 func (sc *syntaxController) Count(c int) {
@@ -65,13 +105,19 @@ func (sc *syntaxController) Count(c int) {
 }
 
 func (ss *SyllSyntaxer) DaySyntaxer(txt string) model.Day {
-	//19.01.22 - Среда (нечётная неделя)
-	//date - :8
-	dt := txt[:_idxDate]
-	s := txt[_idxStartDaily:]
+	var (
+		//Late: getters
+		dayIdx       = ss.controller.moderator.dayIdx
+		dailerIdx    = ss.controller.moderator.startDailerIdx
+		switchStatus = ss.controller.moderator.mondaySwitcher
+	)
+
+	dt := txt[:dayIdx]
+	s := txt[dailerIdx:]
+
 	return model.Day{
 		Dailer: func(t string) string {
-			if t[1] == _graphStartDailyM {
+			if switchStatus && t[1] == _graphStartDailyM {
 				return s[:strings.Index(s, _sepBrack)]
 			}
 
@@ -84,29 +130,47 @@ func (ss *SyllSyntaxer) DaySyntaxer(txt string) model.Day {
 	}
 }
 
-const _idxAud = 14
 const (
-	_timeSelector = ".time"
-	_discSelector = ".disc"
-	_audSelector  = ".aud"
-	_teacSelector = ".teac"
+	_timeSelector    = ".time"
+	_discSelector    = ".disc"
+	_audSelector     = ".aud"
+	_teacSelector    = ".teac"
+	_teacDivSelector = "div .teac"
 )
 
 const (
 	_emptyStatusDisc = "empty"
+	_emptyTrLen      = 23
 )
+
+var (
+	_dirtyRune9    rune = 9
+	_dirtyRune10   rune = 10
+)
+var _isDirty = func(r rune) bool {
+	return r == _dirtyRune10 || r == _dirtyRune9
+}
 
 func (ss *SyllSyntaxer) SchedSyntaxer(e *colly.HTMLElement) model.Schedule {
 	d := e.ChildText(_discSelector)
 	d = d[:len(d)-1]
 	var st int
 
-	//println("-PETRAKOVA-", e.ChildText(_teacSelector))
 	return model.Schedule{
 		Time: e.ChildText(_timeSelector),
-		Auditorium: func() string {
-			_t := e.ChildText(_audSelector)[:_idxAud]
-			return strings.TrimSpace(_t)
+		Auditorium: func() string { 
+			_t := e.ChildText(_audSelector)
+
+			var temp []rune
+			for _, r := range _t {
+				if !_isDirty(r) {
+					temp = append(temp, r)
+					continue
+				}
+				break
+			}
+
+			return string(temp)
 		}(),
 		Subject: func(t string) string {
 			st = strings.Index(t, _sepBrack)
@@ -122,6 +186,27 @@ func (ss *SyllSyntaxer) SchedSyntaxer(e *colly.HTMLElement) model.Schedule {
 			// May change the description
 			return _emptyStatusDisc
 		}(d),
-		Teacher: e.ChildText(_teacSelector),
+		Entity: func() string {
+			t := e.ChildText(_teacDivSelector)
+			var _endGroupsMarker = "-"
+			t += _endGroupsMarker
+
+			var _sepGroupsRune rune = '/'
+			var _limitSize = len(t) - 1
+			var temp []rune
+			for i, r := range t {
+				if i == _limitSize {
+					return string(temp)
+				}
+				if !_isDirty(r) {
+					temp = append(temp, r)
+					if nxt := rune(byte(t[i+1])); _isDirty(nxt) {
+						temp = append(temp, _sepGroupsRune)
+					}
+				}
+			}
+
+			return string(temp)
+		}(),
 	}
 }

@@ -145,8 +145,8 @@ func easyjsonE9148b71DecodeGithubComSyllabTeamSyllApiCoreModel1(in *jlexer.Lexer
 			out.Time = string(in.String())
 		case "auditorium":
 			out.Auditorium = string(in.String())
-		case "teacher":
-			out.Teacher = string(in.String())
+		case "entity":
+			out.Entity = string(in.String())
 		case "subject":
 			out.Subject = string(in.String())
 		case "scheduleStatus":
@@ -176,9 +176,9 @@ func easyjsonE9148b71EncodeGithubComSyllabTeamSyllApiCoreModel1(out *jwriter.Wri
 		out.String(string(in.Auditorium))
 	}
 	{
-		const prefix string = ",\"teacher\":"
+		const prefix string = ",\"entity\":"
 		out.RawString(prefix)
-		out.String(string(in.Teacher))
+		out.String(string(in.Entity))
 	}
 	{
 		const prefix string = ",\"subject\":"

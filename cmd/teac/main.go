@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	cfg := configs.NewSyllConfigManager()
+	cfg := configs.NewSyllConfigManagerTest()
 	if err := cfg.RiseSyllConfigs(); err != nil {
 		println("----CFG-----", cfg.RiseSyllConfigs().Error())
 	}
