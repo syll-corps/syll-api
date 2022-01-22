@@ -23,11 +23,8 @@ const _evenSize = 27
 
 type SyllSyntaxer struct {
 	controller *syntaxController
-
-	/* 	mod modController */
 }
 
-// Late: func opt
 func NewSyllSyntaxer() *SyllSyntaxer {
 	return &SyllSyntaxer{
 		controller: &syntaxController{
@@ -62,11 +59,12 @@ var _modMap = map[string]int{
 	_modTeach: _idxDateT,
 }
 
+
+//Late: --> parser.mod logic
 type modController struct {
 	mod string
 
 	dayIdx int
-
 	startDailerIdx int
 
 	mondaySwitcher bool
@@ -140,7 +138,7 @@ const (
 
 const (
 	_emptyStatusDisc = "empty"
-	_emptyTrLen      = 23
+	_defEmptyTrLen      = 23
 )
 
 var (

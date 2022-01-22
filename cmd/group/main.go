@@ -2,25 +2,22 @@ package main
 
 import (
 	"log"
-
-	"sync"
 	"time"
 	"github.com/syllab-team/syll-api/configs"
 	"github.com/syllab-team/syll-api/core/syllparser"
 )
 
 func main() {
-
 	cfg := configs.NewSyllConfigManagerTest()
 	if err := cfg.RiseSyllConfigs(); err != nil {
-		println("----CFG-----", cfg.RiseSyllConfigs().Error())
+		log.Printf("with config - [%e]", err)
 	}
 	parser := syllparser.NewSyllParser(
-		cfg,
-		12,
-		&sync.Mutex{},
-		12,
-	)
+		syllparser.WithConfigManager(cfg),
+		syllparser.WithLinkerByOptions(),
+		syllparser.WithAsyncCollector(),
+		syllparser.WithGroupsMod(),
+	) 
 
 	pool, er := parser.CollectSyllabGroup("622401")
 	if er != nil {

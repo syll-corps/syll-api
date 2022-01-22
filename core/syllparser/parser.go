@@ -5,6 +5,7 @@ import (
 
 	"github.com/gocolly/colly"
 	"github.com/syllab-team/syll-api/configs"
+	"go.uber.org/zap"
 )
 
 type limitCursor struct {
@@ -27,44 +28,59 @@ const _markTeach = "T"
 
 // For count the re-element in the parsed html and escape other
 type syllController struct {
-	SyllSelector string
+	selector selectorSwitcher
 
-	limiter limitController 
+	// Late: delete
+	limiter limitController
 	escaper *htmlEscaper
 
+	// Late: delete
 	Counter    int
 	LockStatus bool
-} 
+}
+
+type selectorSwitcher struct {
+	syllSelector string
+	teacSelector string
+}
+
+func (sc *syllController) GetSelectorSyll() string {
+	return sc.selector.syllSelector
+}
+
+func (sc *syllController) GetSelectorTeac() string {
+	return sc.selector.teacSelector
+}
 
 // Test
 type htmlEscaper struct {
 	// Late: custom
-	mod string 
+	mod string
 
-	escaper func(e *colly.HTMLElement) bool 
+	escaper func(e *colly.HTMLElement) bool
 
 	escapeLimit int
-} 
+}
 
-func(esc *htmlEscaper) SetLimit(l int) {
+func (esc *htmlEscaper) SetLimit(l int) {
 	esc.escapeLimit = l
 }
 
-func (sc *syllController) SetMod(m string) { 
+func (sc *syllController) SetMod(m string) {
 	esc := sc.escaper
-	esc.mod = m  
+	esc.mod = m
 
 	switch m {
 	case _modTeach:
 		esc.escaper = func(e *colly.HTMLElement) bool {
 			return len(e.Text) == esc.escapeLimit
 		}
-	case _modGroup: 
+	case _modGroup:
 		esc.escaper = func(e *colly.HTMLElement) bool {
 			return e.ChildText(".aud") == ""
 		}
 	}
-} 
+}
 
 func (sc *syllController) GetEscapeStatus(e *colly.HTMLElement) bool {
 	return sc.escaper.escaper(e)
@@ -105,6 +121,9 @@ func (sc *syllController) GetLocker() bool {
 	return sc.LockStatus
 }
 
+type parserModerator struct {
+	mod string
+}
 type SyllParser struct {
 	// Core of the parser
 	Engine *colly.Collector
@@ -116,9 +135,11 @@ type SyllParser struct {
 	Locker *sync.Mutex
 
 	// Logger instance
-	SyllLogger interface{}
+	SyllLogger *zap.Logger
 
-	//	Work struct for the work with the html-element
+	Moderator *parserModerator
+
+	// Work struct for the work with the html-element
 	HtmlController *syllController
 
 	// Custom struct for the set the behavior of the syntaxer and the count-metrics analyser
@@ -131,32 +152,150 @@ type SyllParser struct {
 	Linker *SyllabLinker
 }
 
-func NewSyllParser(cfg *configs.SyllConfigManager, repo interface{},
-	mx *sync.Mutex, lg interface{}) *SyllParser {
-	s := &SyllParser{
-		Engine: colly.NewCollector(
-			colly.Async(true),
-		),
-		Repository: repo,
-		Locker:     mx,
-		SyllLogger: lg,
+// Funtional options part
+type ParserOption func(*SyllParser)
 
-		// Late: func opt
-		HtmlController: &syllController{
-			SyllSelector: syllElementSelector,
-			escaper: func() *htmlEscaper {
-				e := new(htmlEscaper)
-				//Late: change const name
-				e.SetLimit(_emptyTrLen)
-				return e
-			}(),
-		},
-		Syntaxer: NewSyllSyntaxer(),
-		Config:   cfg,
+func WithLogger(l *zap.Logger) ParserOption {
+	return func(sp *SyllParser) {
+		sp.SyllLogger = l
+	}
+}
+
+func _defaultLogger() *zap.Logger {
+	// Late: add new logger settings and logic
+	l, err := zap.NewDevelopment()
+	if err != nil {
+		return &zap.Logger{}
 	}
 
-	s.Linker = &SyllabLinker{
-		core: s.Config.GetLinkCore(),
+	return l
+}
+
+func WithRepository(r interface{}) ParserOption {
+	return func(sp *SyllParser) {
+		sp.Repository = r
+	}
+}
+
+// Late: returns the repository instance
+func _deafaultRepository() interface{} {
+	const _tempDefaultRepoValue = '1'
+	return _tempDefaultRepoValue
+}
+
+// ConfigManager and configs options.
+func WithConfigManager(cfg *configs.SyllConfigManager) ParserOption {
+	return func(sp *SyllParser) {
+		sp.Config = cfg
+	}
+}
+
+func _defaultConfigManager() *configs.SyllConfigManager {
+	return configs.NewSyllConfigManager()
+}
+
+// Linker options and setuping the links.
+func WithLinkerOtherCore(c string) ParserOption {
+	return func(sp *SyllParser) {
+		sp.Linker.core = c
+	}
+}
+
+func WithLinkerByOptions() ParserOption {
+	return func(sp *SyllParser) {
+		l := &SyllabLinker{}
+		l.core = sp.Config.GetLinkCore()
+		sp.Linker = l
+	}
+}
+
+// Unrecommended
+func _defaultLinker() *SyllabLinker {
+	return &SyllabLinker{}
+}
+
+// Mod functional options settings
+func WithGroupsMod() ParserOption {
+	return func(sp *SyllParser) {
+		sp.SetParserMod(_modGroup)
+	}
+}
+
+func WithTeachsMod() ParserOption {
+	return func(sp *SyllParser) {
+		sp.SetParserMod(_modTeach)
+	}
+}
+
+func _defaultModerator() *parserModerator {
+	return &parserModerator{}
+}
+
+func (sp *SyllParser) SetParserMod(m string) {
+	sp.Moderator.mod = m
+
+	sp.HtmlController.SetMod(m)
+	sp.Syntaxer.SetMod(m)
+}
+
+// Syntaxer limiter options
+func _defaultSyntaxer() *SyllSyntaxer {
+	return NewSyllSyntaxer()
+}
+
+// Controllers options.
+func _defaultSyllController() *syllController {
+	const _syllElementSelector = ".tt tr"
+
+	return &syllController{
+		selector: selectorSwitcher{
+			syllSelector: _syllElementSelector,
+			teacSelector: _teacSelector,
+		},
+		escaper: func() *htmlEscaper {
+			e := new(htmlEscaper)
+			//Late: change const name
+			e.SetLimit(_defEmptyTrLen)
+			return e
+		}(),
+	}
+}
+
+//Lock options.
+func _defaultLock() *sync.Mutex {
+	return &sync.Mutex{}
+}
+
+//Engine and collectors logic options.
+func WithAsyncCollector() ParserOption {
+	const _asyncModMarker = true
+	return func(sp *SyllParser) {
+		sp.Engine = colly.NewCollector(
+			colly.Async(_asyncModMarker),
+		)
+	}
+}
+
+func _defaultEngingeCollector() *colly.Collector {
+	return colly.NewCollector()
+}
+
+func NewSyllParser(opts ...ParserOption) *SyllParser {
+	// Default value settings
+	s := &SyllParser{
+		Engine:         _defaultEngingeCollector(),
+		Config:         _defaultConfigManager(),
+		Repository:     _deafaultRepository(),
+		SyllLogger:     _defaultLogger(),
+		Moderator:      _defaultModerator(),
+		HtmlController: _defaultSyllController(),
+		Syntaxer:       _defaultSyntaxer(),
+		Linker:         _defaultLinker(),
+		Locker:         _defaultLock(),
+	}
+
+	for _, opt := range opts {
+		opt(s)
 	}
 
 	return s

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"sync"
+	"log"
 	"time"
 
 	"github.com/syllab-team/syll-api/configs"
@@ -11,16 +11,15 @@ import (
 func main() {
 	cfg := configs.NewSyllConfigManagerTest()
 	if err := cfg.RiseSyllConfigs(); err != nil {
-		println("----CFG-----", cfg.RiseSyllConfigs().Error())
+		log.Printf("with config - [%e]", err)
 	}
 	parser := syllparser.NewSyllParser(
-		cfg,
-		12,
-		&sync.Mutex{},
-		12,
-	)
+		syllparser.WithConfigManager(cfg),
+		syllparser.WithLinkerByOptions(),
+		syllparser.WithAsyncCollector(),
+		syllparser.WithTeachsMod(),
+	) 
 
 	parser.CollectSyllabTeach("622401")
 	time.Sleep(time.Second * 3)
-	//println(viper.GetString("group"))
 }

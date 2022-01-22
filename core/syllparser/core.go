@@ -8,8 +8,6 @@ import (
 	"github.com/syllab-team/syll-api/core/xpool"
 )
 
-const syllElementSelector = ".tt tr"
-
 // Core parsing function. Collect the models and set this in LOCAL the xpool.
 func (spr *SyllParser) CollectSyllab(link string) (*xpool.XerPool, error) {
 	g := spr.Engine
@@ -19,7 +17,7 @@ func (spr *SyllParser) CollectSyllab(link string) (*xpool.XerPool, error) {
 	//log.Println("-------LIMIT>>>-----------", hr.limiter.cursor.curLim)
 
 	p := xpool.NewXerPool()
-	g.OnHTML(hr.SyllSelector, func(e *colly.HTMLElement) {
+	g.OnHTML(hr.GetSelectorSyll(), func(e *colly.HTMLElement) {
 		// Day string getting by u tag
 		if dayTxt := e.ChildText("u"); dayTxt != "" {
 			if p.CurStatus() {
@@ -63,12 +61,6 @@ func (spr *SyllParser) CollectSyllab(link string) (*xpool.XerPool, error) {
 }
 
 func (spr *SyllParser) CollectSyllabGroup(group string) (*xpool.XerPool, error) {
-	c := spr.HtmlController
-	s := spr.Syntaxer
-
-	c.SetCur(group)
-	s.SetMod(_modGroup)
-	c.SetMod(_modGroup)
 	l := spr.Linker.MakeGroupUri(group)
 	p, err := spr.CollectSyllab(l)
 
@@ -82,10 +74,7 @@ func (spr *SyllParser) CollectSyllabTeach(group string) {
 	hr := spr.HtmlController
 	sr := spr.Syntaxer
 
-	sr.SetMod(_modTeach)
-	hr.SetMod(_modTeach)
-
-	c.OnHTML(hr.SyllSelector, func(h *colly.HTMLElement) {
+	c.OnHTML(hr.GetSelectorSyll(), func(h *colly.HTMLElement) {
 		// Day string getting by u tag
 		if dayTxt := h.ChildText("u"); dayTxt != "" {
 			//Late: pool-logic
@@ -105,11 +94,8 @@ func (spr *SyllParser) CollectSyllabTeach(group string) {
 		log.Println("-------SCH-SER-----------", sch)
 	})
 
-	g.OnHTML(".teac", func(e *colly.HTMLElement) {
-		//println("----HTML-----", e.Text)
+	g.OnHTML(hr.GetSelectorTeac(), func(e *colly.HTMLElement) {
 		u := e.ChildAttr("a", "href")
-		//println("\n-------------------------------------[TEACHER]", u)
-
 		c.Visit(u)
 		c.Wait()
 	})
