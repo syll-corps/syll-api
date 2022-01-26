@@ -28,6 +28,7 @@ require (
 require (
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/gocolly/colly v1.2.0
+	github.com/google/go-cmp v0.5.7
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/magiconair/properties v1.8.5 // indirect
 	github.com/mailru/easyjson v0.7.7

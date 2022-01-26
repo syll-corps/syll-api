@@ -5,30 +5,23 @@ import (
 	"time"
 
 	"github.com/gocolly/colly"
-	"github.com/syllab-team/syll-api/core/xpool"
 )
 
 // Core parsing function. Collect the models and set this in LOCAL the xpool.
-func (spr *SyllParser) CollectSyllab(link string) (*xpool.XerPool, error) {
+func (spr *SyllParser) CollectSyllab(link string) ([][]byte, error) {
 	g := spr.Engine
 	hr := spr.HtmlController
 	sr := spr.Syntaxer
 
-	//log.Println("-------LIMIT>>>-----------", hr.limiter.cursor.curLim)
-
-	p := xpool.NewXerPool()
+	// bus
+	cor := spr.BusManager.Constructor
 	g.OnHTML(hr.GetSelectorSyll(), func(e *colly.HTMLElement) {
 		// Day string getting by u tag
 		if dayTxt := e.ChildText("u"); dayTxt != "" {
-			if p.CurStatus() {
-				p.PushModel()
-			}
-
-			log.Println("-------DAY-----------", dayTxt)
 			d := sr.DaySyntaxer(dayTxt)
+			// Late: ->log
 			log.Println("-------DAY-SER-----------", d)
-
-			p.SetCur(d)
+			cor.SwitchCursor(d)
 			return
 		}
 
@@ -39,7 +32,9 @@ func (spr *SyllParser) CollectSyllab(link string) (*xpool.XerPool, error) {
 
 		sch := sr.SchedSyntaxer(e)
 		log.Println("-------SCH-SER-----------", sch)
-		p.PushSched(sch)
+
+		// push sched to the trap.
+		cor.PushSched(sch)
 	})
 
 	g.OnRequest(func(r *colly.Request) {
@@ -57,30 +52,41 @@ func (spr *SyllParser) CollectSyllab(link string) (*xpool.XerPool, error) {
 
 	// Late: gracefull connection logic
 	time.Sleep(time.Second * 3)
-	return p, err
+
+	// Push last model to pool
+	if err := cor.PushCrossedModelToPool(); err != nil {
+		log.Printf("\n\n [NIL-MODEL-PUSH-TAKING] - [%e]", err)
+	}
+	return cor.Trap.Pool, err
 }
 
-func (spr *SyllParser) CollectSyllabGroup(group string) (*xpool.XerPool, error) {
+func (spr *SyllParser) CollectSyllabGroup(group string) error {
 	l := spr.Linker.MakeGroupUri(group)
-	p, err := spr.CollectSyllab(l)
-
+	m, err := spr.CollectSyllab(l)
+	for _, r := range m {
+		log.Printf("ser-model - [%s]", r)
+		println()
+	}
 	//c.Rebase()
-	return p, err
+	return err
 }
 
 func (spr *SyllParser) CollectSyllabTeach(group string) {
-	g := spr.Engine
+	g := spr.getCollector()
+	hr := spr.getController()
+	sr := spr.getSyntaxer()
+
+	cor := spr.getBusConstructor()
 	c := g.Clone()
-	hr := spr.HtmlController
-	sr := spr.Syntaxer
 
 	c.OnHTML(hr.GetSelectorSyll(), func(h *colly.HTMLElement) {
 		// Day string getting by u tag
 		if dayTxt := h.ChildText("u"); dayTxt != "" {
-			//Late: pool-logic
-			log.Println("\n-------DAY-----------", dayTxt)
 			d := sr.DaySyntaxer(dayTxt)
+
+			//Temp: log
 			log.Println("-------DAY-SER-----------", d)
+			cor.SwitchCursor(d)
 			return
 		}
 
@@ -91,16 +97,37 @@ func (spr *SyllParser) CollectSyllabTeach(group string) {
 		}
 
 		sch := sr.SchedSyntaxer(h)
-		log.Println("-------SCH-SER-----------", sch)
+		cor.PushSched(sch)
+
+		//Temp: log
+		log.Println("-------SCH-SER-----------          ", sch)
 	})
 
 	g.OnHTML(hr.GetSelectorTeac(), func(e *colly.HTMLElement) {
 		u := e.ChildAttr("a", "href")
 		c.Visit(u)
-		c.Wait()
+
+		go func() {
+			c.Wait()
+			if err := cor.PushCrossedModelToPool(); err != nil {
+
+				//Err: log
+				log.Printf("[PUSH MODEL PARSE ERROR] - (%v)", err)
+			}
+
+			//Log the pool content
+			for _, r := range cor.Trap.Pool {
+				log.Printf("\n\n---MODEL-IN-POOL----[%s]\n\n", r)
+			}
+
+			cor.VanishTrap()
+			hr.writeBlockStatus()
+		}()
+
+		hr.waitBlockStatus()
 	})
 
-	g.OnRequest(func(r *colly.Request) {
+	c.OnRequest(func(r *colly.Request) {
 		//Late: add log-func and err-handling
 		println("\n                            [TEACHER] - ", r.URL.String())
 		println()
@@ -108,5 +135,4 @@ func (spr *SyllParser) CollectSyllabTeach(group string) {
 
 	g.Visit(spr.Linker.MakeGroupUri(group))
 	g.Wait()
-	time.Sleep(time.Second * 3)
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/gocolly/colly"
 	"github.com/syllab-team/syll-api/configs"
+	"github.com/syllab-team/syll-api/core/xbus"
 	"go.uber.org/zap"
 )
 
@@ -26,19 +27,33 @@ type limitController struct {
 // Marker of the teach-mod of parsing. Another marker is the number of the group (221201)
 const _markTeach = "T"
 
+type registrBlocker struct {
+	blockChannel chan bool
+} 
+
 // For count the re-element in the parsed html and escape other
 type syllController struct {
 	selector selectorSwitcher
 
 	// Late: delete
 	limiter limitController
-	escaper *htmlEscaper
+	escaper *htmlEscaper 
+
+	// Blocker of the registr goroutine for the correct collect and push data to the pool 
+	blocker *registrBlocker
 
 	// Late: delete
 	Counter    int
 	LockStatus bool
 }
 
+func (sc *syllController) writeBlockStatus() {
+	sc.blocker.blockChannel <- true
+}
+ 
+func (sc *syllController) waitBlockStatus() {
+	<- sc.blocker.blockChannel 
+}
 type selectorSwitcher struct {
 	syllSelector string
 	teacSelector string
@@ -128,6 +143,9 @@ type SyllParser struct {
 	// Core of the parser
 	Engine *colly.Collector
 
+	// Bus between parser methods and repository.
+	BusManager *xbus.CrossPoolManager
+
 	// Storage instance
 	Repository interface{}
 
@@ -150,6 +168,26 @@ type SyllParser struct {
 
 	// Controller for link-managment
 	Linker *SyllabLinker
+}  
+
+
+func (sp *SyllParser) getController() *syllController {
+	return sp.HtmlController
+}
+func (sp *SyllParser) getSyntaxer() *SyllSyntaxer {
+	return sp.Syntaxer
+}
+func (sp *SyllParser) getCollector() *colly.Collector {
+	return sp.Engine
+}
+func (sp *SyllParser) getBusConstructor() *xbus.ConstructManager {
+	return sp.BusManager.Constructor
+}
+
+
+// Bus options.
+func _defaultBusManager() *xbus.CrossPoolManager {
+	return xbus.NewCrossPoolManager()
 }
 
 // Funtional options part
@@ -247,10 +285,14 @@ func _defaultSyntaxer() *SyllSyntaxer {
 func _defaultSyllController() *syllController {
 	const _syllElementSelector = ".tt tr"
 
+	// Late: deafult-value constructors 
 	return &syllController{
 		selector: selectorSwitcher{
 			syllSelector: _syllElementSelector,
 			teacSelector: _teacSelector,
+		},
+		blocker: &registrBlocker{
+			blockChannel: make(chan bool),
 		},
 		escaper: func() *htmlEscaper {
 			e := new(htmlEscaper)
@@ -284,6 +326,7 @@ func NewSyllParser(opts ...ParserOption) *SyllParser {
 	// Default value settings
 	s := &SyllParser{
 		Engine:         _defaultEngingeCollector(),
+		BusManager:     _defaultBusManager(),
 		Config:         _defaultConfigManager(),
 		Repository:     _deafaultRepository(),
 		SyllLogger:     _defaultLogger(),

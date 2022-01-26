@@ -18,8 +18,8 @@ func main() {
 		syllparser.WithLinkerByOptions(),
 		syllparser.WithAsyncCollector(),
 		syllparser.WithTeachsMod(),
-	) 
+	)
 
-	parser.CollectSyllabTeach("622401")
+	parser.CollectSyllabTeach("622001.")
 	time.Sleep(time.Second * 3)
 }
